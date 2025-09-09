@@ -8,25 +8,25 @@ exports.handler = async (event, context) => {
     };
 
     if (event.httpMethod === 'OPTIONS') {
-        return {statusCode: 200, headers, body: ''};
+        return { statusCode: 200, headers, body: '' };
     }
 
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
             headers,
-            body: JSON.stringify({error: 'Method not allowed'})
+            body: JSON.stringify({ error: 'Method not allowed' })
         };
     }
 
     try {
-        const {properties, shopDomain, bundleProductId} = JSON.parse(event.body);
+        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body);
 
         if (!properties || typeof properties !== 'object') {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({error: 'Invalid properties data'})
+                body: JSON.stringify({ error: 'Invalid properties data' })
             };
         }
 
@@ -38,7 +38,7 @@ exports.handler = async (event, context) => {
             return {
                 statusCode: 500,
                 headers,
-                body: JSON.stringify({error: 'Missing Shopify credentials'})
+                body: JSON.stringify({ error: 'Missing Shopify credentials' })
             };
         }
 
@@ -176,79 +176,79 @@ exports.handler = async (event, context) => {
 const PRODUCT_SKU_MAPPING = {
     // Comfort Insoles (max-comfort-insole handle)
     'Max Comfort Insoles': {
-        'Max Cushion|Low|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'CMXIN1M5',
-        'Max Cushion|Low|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'CMXIN1M6',
-        'Max Cushion|Low|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'CMXIN1M7',
-        'Max Cushion|Low|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'CMXIN1M8',
-        'Max Cushion|Low|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'CMXIN1M9',
-        'Max Cushion|Low|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'CMXIN1M10',
-        'Max Cushion|Low|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'CMXIN1M11',
-        'Max Cushion|Low|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'CMXIN1M12',
-        'Max Cushion|Low|Men\'s 13 - 13.5': 'CMXIN1M13',
-        'Max Cushion|Low|Men\'s 14 - 14.5': 'CMXIN1M14',
-        'Max Cushion|Low|Men\'s 15 - 15.5': 'CMXIN1M15',
-        'Max Cushion|Low|Men\'s 16 - 16.5': 'CMXIN1M16',
-        'Max Cushion|Low|Men\'s 17 - 17.5': 'CMXIN1M17',
+        'Max Cushion|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'CMXIN1M5',
+        'Max Cushion|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'CMXIN1M6',
+        'Max Cushion|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'CMXIN1M7',
+        'Max Cushion|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'CMXIN1M8',
+        'Max Cushion|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'CMXIN1M9',
+        'Max Cushion|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'CMXIN1M10',
+        'Max Cushion|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'CMXIN1M11',
+        'Max Cushion|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'CMXIN1M12',
+        'Max Cushion|Low|Men\'s 13-13.5': 'CMXIN1M13',
+        'Max Cushion|Low|Men\'s 14-14.5': 'CMXIN1M14',
+        'Max Cushion|Low|Men\'s 15-15.5': 'CMXIN1M15',
+        'Max Cushion|Low|Men\'s 16-16.5': 'CMXIN1M16',
+        'Max Cushion|Low|Men\'s 17-17.5': 'CMXIN1M17',
 
-        'Max Cushion|Medium|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'CASIN1M5',
-        'Max Cushion|Medium|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'CASIN1M6',
-        'Max Cushion|Medium|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'CASIN1M7',
-        'Max Cushion|Medium|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'CASIN1M8',
-        'Max Cushion|Medium|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'CASIN1M9',
-        'Max Cushion|Medium|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'CASIN1M10',
-        'Max Cushion|Medium|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'CASIN1M11',
-        'Max Cushion|Medium|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'CASIN1M12',
-        'Max Cushion|Medium|Men\'s 13 - 13.5': 'CASIN1M13',
-        'Max Cushion|Medium|Men\'s 14 - 14.5': 'CASIN1M14',
-        'Max Cushion|Medium|Men\'s 15 - 15.5': 'CASIN1M15',
+        'Max Cushion|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'CASIN1M5',
+        'Max Cushion|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'CASIN1M6',
+        'Max Cushion|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'CASIN1M7',
+        'Max Cushion|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'CASIN1M8',
+        'Max Cushion|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'CASIN1M9',
+        'Max Cushion|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'CASIN1M10',
+        'Max Cushion|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'CASIN1M11',
+        'Max Cushion|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'CASIN1M12',
+        'Max Cushion|Medium|Men\'s 13-13.5': 'CASIN1M13',
+        'Max Cushion|Medium|Men\'s 14-14.5': 'CASIN1M14',
+        'Max Cushion|Medium|Men\'s 15-15.5': 'CASIN1M15',
 
-        'Max Cushion|High|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'MXHIN1M5',
-        'Max Cushion|High|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'MXHIN1M6',
-        'Max Cushion|High|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'MXHIN1M7',
-        'Max Cushion|High|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'MXHIN1M8',
-        'Max Cushion|High|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'MXHIN1M9',
-        'Max Cushion|High|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'MXHIN1M10',
-        'Max Cushion|High|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'MXHIN1M11',
-        'Max Cushion|High|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'MXHIN1M12',
-        'Max Cushion|High|Men\'s 13 - 13.5': 'MXHIN1M13',
-        'Max Cushion|High|Men\'s 14 - 14.5': 'MXHIN1M14',
-        'Max Cushion|High|Men\'s 15 - 15.5': 'MXHIN1M15',
+        'Max Cushion|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'MXHIN1M5',
+        'Max Cushion|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'MXHIN1M6',
+        'Max Cushion|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'MXHIN1M7',
+        'Max Cushion|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'MXHIN1M8',
+        'Max Cushion|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'MXHIN1M9',
+        'Max Cushion|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'MXHIN1M10',
+        'Max Cushion|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'MXHIN1M11',
+        'Max Cushion|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'MXHIN1M12',
+        'Max Cushion|High|Men\'s 13-13.5': 'MXHIN1M13',
+        'Max Cushion|High|Men\'s 14-14.5': 'MXHIN1M14',
+        'Max Cushion|High|Men\'s 15-15.5': 'MXHIN1M15',
 
-        'Low Profile|Low|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'CLPIN1M5',
-        'Low Profile|Low|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'CLPIN1M6',
-        'Low Profile|Low|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'CLPIN1M7',
-        'Low Profile|Low|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'CLPIN1M8',
-        'Low Profile|Low|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'CLPIN1M9',
-        'Low Profile|Low|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'CLPIN1M10',
-        'Low Profile|Low|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'CLPIN1M11',
-        'Low Profile|Low|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'CLPIN1M12',
-        'Low Profile|Low|Men\'s 13 - 13.5': 'CLPIN1M13',
-        'Low Profile|Low|Men\'s 14 - 14.5': 'CLPIN1M14',
-        'Low Profile|Low|Men\'s 15 - 15.5': 'CLPIN1M15',
+        'Low Profile|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'CLPIN1M5',
+        'Low Profile|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'CLPIN1M6',
+        'Low Profile|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'CLPIN1M7',
+        'Low Profile|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'CLPIN1M8',
+        'Low Profile|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'CLPIN1M9',
+        'Low Profile|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'CLPIN1M10',
+        'Low Profile|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'CLPIN1M11',
+        'Low Profile|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'CLPIN1M12',
+        'Low Profile|Low|Men\'s 13-13.5': 'CLPIN1M13',
+        'Low Profile|Low|Men\'s 14-14.5': 'CLPIN1M14',
+        'Low Profile|Low|Men\'s 15-15.5': 'CLPIN1M15',
 
-        'Low Profile|Medium|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'LPMIN1M5',
-        'Low Profile|Medium|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'LPMIN1M6',
-        'Low Profile|Medium|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'LPMIN1M7',
-        'Low Profile|Medium|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'LPMIN1M8',
-        'Low Profile|Medium|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'LPMIN1M9',
-        'Low Profile|Medium|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'LPMIN1M10',
-        'Low Profile|Medium|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'LPMIN1M11',
-        'Low Profile|Medium|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'LPMIN1M12',
-        'Low Profile|Medium|Men\'s 13 - 13.5': 'LPMIN1M13',
-        'Low Profile|Medium|Men\'s 14 - 14.5': 'LPMIN1M14',
-        'Low Profile|Medium|Men\'s 15 - 15.5': 'LPMIN1M15',
+        'Low Profile|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'LPMIN1M5',
+        'Low Profile|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'LPMIN1M6',
+        'Low Profile|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'LPMIN1M7',
+        'Low Profile|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'LPMIN1M8',
+        'Low Profile|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'LPMIN1M9',
+        'Low Profile|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'LPMIN1M10',
+        'Low Profile|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'LPMIN1M11',
+        'Low Profile|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'LPMIN1M12',
+        'Low Profile|Medium|Men\'s 13-13.5': 'LPMIN1M13',
+        'Low Profile|Medium|Men\'s 14-14.5': 'LPMIN1M14',
+        'Low Profile|Medium|Men\'s 15-15.5': 'LPMIN1M15',
 
-        'Low Profile|High|Men\'s 5 - 5.5 | Women\'s 6-6.5': 'LPHIN1M5',
-        'Low Profile|High|Men\'s 6 - 6.5 | Women\'s 7-7.5': 'LPHIN1M6',
-        'Low Profile|High|Men\'s 7 - 7.5 | Women\'s 8-8.5': 'LPHIN1M7',
-        'Low Profile|High|Men\'s 8 - 8.5 | Women\'s 9-9.5': 'LPHIN1M8',
-        'Low Profile|High|Men\'s 9 - 9.5 | Women\'s 10-10.5': 'LPHIN1M9',
-        'Low Profile|High|Men\'s 10 - 10.5 | Women\'s 11-11.5': 'LPHIN1M10',
-        'Low Profile|High|Men\'s 11 - 11.5 | Women\'s 12-12.5': 'LPHIN1M11',
-        'Low Profile|High|Men\'s 12 - 12.5 | Women\'s 13-13.5': 'LPHIN1M12',
-        'Low Profile|High|Men\'s 13 - 13.5': 'LPHIN1M13',
-        'Low Profile|High|Men\'s 14 - 14.5': 'LPHIN1M14',
-        'Low Profile|High|Men\'s 15 - 15.5': 'LPHIN1M15'
+        'Low Profile|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'LPHIN1M5',
+        'Low Profile|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'LPHIN1M6',
+        'Low Profile|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'LPHIN1M7',
+        'Low Profile|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'LPHIN1M8',
+        'Low Profile|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'LPHIN1M9',
+        'Low Profile|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'LPHIN1M10',
+        'Low Profile|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'LPHIN1M11',
+        'Low Profile|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'LPHIN1M12',
+        'Low Profile|High|Men\'s 13-13.5': 'LPHIN1M13',
+        'Low Profile|High|Men\'s 14-14.5': 'LPHIN1M14',
+        'Low Profile|High|Men\'s 15-15.5': 'LPHIN1M15'
     },
 
     // NonSlip 'FoamLock' Performance Insoles (nonslip-insoles handle)
