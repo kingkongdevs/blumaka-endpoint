@@ -209,13 +209,36 @@ exports.handler = async (event, context) => {
         // Parse properties to extract SKUs using our product mapping
         const lineItems = parsePropertiesToSKUs(properties);
 
-        if (lineItems.length === 0) {
+        console.log('Parsed line items:', lineItems);
+        console.log('Line items type:', typeof lineItems, 'Is array:', Array.isArray(lineItems));
+
+        if (!Array.isArray(lineItems) || lineItems.length === 0) {
             return {
                 statusCode: 400,
                 headers,
                 body: JSON.stringify({
                     error: 'No valid SKUs found from properties',
-                    properties: properties
+                    properties: properties,
+                    lineItems: lineItems,
+                    lineItemsType: typeof lineItems
+                })
+            };
+        }
+
+        // Validate each line item structure
+        const invalidLineItems = lineItems.filter(item =>
+            !item.sku || typeof item.sku !== 'string' ||
+            !item.quantity || typeof item.quantity !== 'number'
+        );
+
+        if (invalidLineItems.length > 0) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: 'Invalid line item structure',
+                    invalidItems: invalidLineItems,
+                    allLineItems: lineItems
                 })
             };
         }
