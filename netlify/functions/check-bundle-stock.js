@@ -660,13 +660,16 @@ function findSKUForProduct(productName, selectedOptions) {
     return null;
 }
 
-// Convert selected options back to original property format
+// Convert selected options back to Shopify properties array format
 function convertToOriginalProperties(productName, selectedOptions) {
-    const properties = {};
+    const properties = [];
 
     for (const [optionType, value] of Object.entries(selectedOptions)) {
-        const propertyKey = `${productName}: ${optionType}`;
-        properties[propertyKey] = value;
+        const propertyName = `${productName}: ${optionType}`;
+        properties.push({
+            name: propertyName,
+            value: value
+        });
     }
 
     return properties;
