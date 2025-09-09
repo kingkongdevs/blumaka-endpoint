@@ -329,7 +329,7 @@ const PRODUCT_SKU_MAPPING = {
     },
 
     // Fleks East Beach Slides
-    'Fleks® East Beach Slides': {
+    'Fleks East Beach Slides': {
         'Blu Blue|Women\'s 5 | Men\'s 4': '808-1BLUW5',
         'Blu Blue|Women\'s 6 | Men\'s 5': '808-1BLUW6',
         'Blu Blue|Women\'s 7 | Men\'s 6': '808-1BLUW7',
