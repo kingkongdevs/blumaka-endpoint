@@ -1,0 +1,650 @@
+// netlify/functions/check-bundle-stock.js
+exports.handler = async (event, context) => {
+    // Handle CORS
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    };
+
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
+    }
+
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Method not allowed' })
+        };
+    }
+
+    try {
+        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body);
+
+        if (!properties || typeof properties !== 'object') {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Invalid properties data' })
+            };
+        }
+
+        // Shopify Admin API credentials
+        const shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+        const shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || shopDomain;
+
+        if (!shopifyAccessToken || !shopifyShopDomain) {
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ error: 'Missing Shopify credentials' })
+            };
+        }
+
+        console.log('Received properties:', properties);
+
+        // Parse properties to extract variant IDs using our product mapping
+        const variants = parsePropertiesToVariants(properties);
+
+        if (variants.length === 0) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: 'No valid variants found from properties',
+                    properties: properties
+                })
+            };
+        }
+
+        console.log('Mapped to variants:', variants);
+
+        // Create line items for draft order
+        const lineItems = variants.map(variant => ({
+            variant_id: variant.id,
+            quantity: variant.quantity || 1,
+            properties: variant.originalProperties || {}
+        }));
+
+        // Create draft order payload
+        const draftOrderPayload = {
+            draft_order: {
+                line_items: lineItems,
+                use_customer_default_address: false,
+                invoice_sent_at: null,
+                note: "Stock validation check - do not fulfill"
+            }
+        };
+
+        console.log('Creating draft order with payload:', JSON.stringify(draftOrderPayload, null, 2));
+
+        // Make API call to Shopify
+        const response = await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders.json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': shopifyAccessToken
+            },
+            body: JSON.stringify(draftOrderPayload)
+        });
+
+        const result = await response.json();
+        console.log('Shopify API response status:', response.status);
+        console.log('Shopify API response:', result);
+
+        if (response.ok) {
+            // Draft order created successfully - items are in stock
+            const draftOrderId = result.draft_order.id;
+
+            // Immediately delete the draft order since we only wanted to validate
+            await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders/${draftOrderId}.json`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Shopify-Access-Token': shopifyAccessToken
+                }
+            });
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    available: true,
+                    message: 'All items in stock',
+                    variants: variants,
+                    properties: properties
+                })
+            };
+        } else {
+            // Draft order failed - likely due to stock issues
+            let stockIssues = [];
+
+            if (result.errors) {
+                const errorMessages = Array.isArray(result.errors) ? result.errors : [result.errors];
+                errorMessages.forEach(error => {
+                    if (typeof error === 'string') {
+                        stockIssues.push(error);
+                    } else if (error.line_items) {
+                        error.line_items.forEach(lineError => {
+                            stockIssues.push(lineError);
+                        });
+                    }
+                });
+            }
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    available: false,
+                    message: 'Some items are out of stock',
+                    errors: stockIssues,
+                    variants: variants,
+                    properties: properties,
+                    shopifyResponse: result
+                })
+            };
+        }
+
+    } catch (error) {
+        console.error('Stock check error:', error);
+
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({
+                error: 'Internal server error',
+                message: error.message
+            })
+        };
+    }
+};
+
+// netlify/functions/check-bundle-stock.js
+exports.handler = async (event, context) => {
+    // Handle CORS
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    };
+
+    if (event.httpMethod === 'OPTIONS') {
+        return { statusCode: 200, headers, body: '' };
+    }
+
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Method not allowed' })
+        };
+    }
+
+    try {
+        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body);
+
+        if (!properties || typeof properties !== 'object') {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Invalid properties data' })
+            };
+        }
+
+        // Shopify Admin API credentials
+        const shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+        const shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || shopDomain;
+
+        if (!shopifyAccessToken || !shopifyShopDomain) {
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({ error: 'Missing Shopify credentials' })
+            };
+        }
+
+        console.log('Received properties:', properties);
+
+        // Parse properties to extract SKUs using our product mapping
+        const lineItems = parsePropertiesToSKUs(properties);
+
+        if (lineItems.length === 0) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: 'No valid SKUs found from properties',
+                    properties: properties
+                })
+            };
+        }
+
+        console.log('Mapped to SKUs:', lineItems);
+
+        // Create draft order payload using SKUs
+        const draftOrderPayload = {
+            draft_order: {
+                line_items: lineItems,
+                use_customer_default_address: false,
+                invoice_sent_at: null,
+                note: "Stock validation check - do not fulfill"
+            }
+        };
+
+        console.log('Creating draft order with payload:', JSON.stringify(draftOrderPayload, null, 2));
+
+        // Make API call to Shopify
+        const response = await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders.json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': shopifyAccessToken
+            },
+            body: JSON.stringify(draftOrderPayload)
+        });
+
+        const result = await response.json();
+        console.log('Shopify API response status:', response.status);
+        console.log('Shopify API response:', result);
+
+        if (response.ok) {
+            // Draft order created successfully - items are in stock
+            const draftOrderId = result.draft_order.id;
+
+            // Immediately delete the draft order since we only wanted to validate
+            await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders/${draftOrderId}.json`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Shopify-Access-Token': shopifyAccessToken
+                }
+            });
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    available: true,
+                    message: 'All items in stock',
+                    lineItems: lineItems,
+                    properties: properties
+                })
+            };
+        } else {
+            // Draft order failed - likely due to stock issues
+            let stockIssues = [];
+
+            if (result.errors) {
+                const errorMessages = Array.isArray(result.errors) ? result.errors : [result.errors];
+                errorMessages.forEach(error => {
+                    if (typeof error === 'string') {
+                        stockIssues.push(error);
+                    } else if (error.line_items) {
+                        error.line_items.forEach(lineError => {
+                            stockIssues.push(lineError);
+                        });
+                    }
+                });
+            }
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    available: false,
+                    message: 'Some items are out of stock',
+                    errors: stockIssues,
+                    lineItems: lineItems,
+                    properties: properties,
+                    shopifyResponse: result
+                })
+            };
+        }
+
+    } catch (error) {
+        console.error('Stock check error:', error);
+
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({
+                error: 'Internal server error',
+                message: error.message
+            })
+        };
+    }
+};
+
+// Product SKU mapping based on your actual Shopify data
+const PRODUCT_SKU_MAPPING = {
+    // Max Comfort Insoles / Comfort Insoles
+    'Max Comfort Insoles': {
+        'Low Profile|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'CLPIN1M5',
+        'Low Profile|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'CLPIN1M6',
+        'Low Profile|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'CLPIN1M7',
+        'Low Profile|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'CLPIN1M8',
+        'Low Profile|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'CLPIN1M9',
+        'Low Profile|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'CLPIN1M10',
+        'Low Profile|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'CLPIN1M11',
+        'Low Profile|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'CLPIN1M12',
+        'Low Profile|Low|Men\'s 13-13.5': 'CLPIN1M13',
+        'Low Profile|Low|Men\'s 14-14.5': 'CLPIN1M14',
+        'Low Profile|Low|Men\'s 15-15.5': 'CLPIN1M15',
+
+        'Low Profile|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'LPMIN1M5',
+        'Low Profile|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'LPMIN1M6',
+        'Low Profile|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'LPMIN1M7',
+        'Low Profile|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'LPMIN1M8',
+        'Low Profile|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'LPMIN1M9',
+        'Low Profile|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'LPMIN1M10',
+        'Low Profile|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'LPMIN1M11',
+        'Low Profile|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'LPMIN1M12',
+        'Low Profile|Medium|Men\'s 13-13.5': 'LPMIN1M13',
+        'Low Profile|Medium|Men\'s 14-14.5': 'LPMIN1M14',
+        'Low Profile|Medium|Men\'s 15-15.5': 'LPMIN1M15',
+
+        'Low Profile|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'LPHIN1M5',
+        'Low Profile|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'LPHIN1M6',
+        'Low Profile|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'LPHIN1M7',
+        'Low Profile|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'LPHIN1M8',
+        'Low Profile|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'LPHIN1M9',
+        'Low Profile|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'LPHIN1M10',
+        'Low Profile|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'LPHIN1M11',
+        'Low Profile|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'LPHIN1M12',
+        'Low Profile|High|Men\'s 13-13.5': 'LPHIN1M13',
+        'Low Profile|High|Men\'s 14-14.5': 'LPHIN1M14',
+        'Low Profile|High|Men\'s 15-15.5': 'LPHIN1M15',
+
+        'Max Cushion|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'CMXIN1M5',
+        'Max Cushion|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'CMXIN1M6',
+        'Max Cushion|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'CMXIN1M7',
+        'Max Cushion|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'CMXIN1M8',
+        'Max Cushion|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'CMXIN1M9',
+        'Max Cushion|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'CMXIN1M10',
+        'Max Cushion|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'CMXIN1M11',
+        'Max Cushion|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'CMXIN1M12',
+        'Max Cushion|Low|Men\'s 13-13.5': 'CMXIN1M13',
+        'Max Cushion|Low|Men\'s 14-14.5': 'CMXIN1M14',
+        'Max Cushion|Low|Men\'s 15-15.5': 'CMXIN1M15',
+        'Max Cushion|Low|Men\'s 16 - 16.5': 'CMXIN1M16',
+        'Max Cushion|Low|Men\'s 17 - 17.5': 'CMXIN1M17',
+
+        'Max Cushion|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'CASIN1M5',
+        'Max Cushion|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'CASIN1M6',
+        'Max Cushion|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'CASIN1M7',
+        'Max Cushion|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'CASIN1M8',
+        'Max Cushion|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'CASIN1M9',
+        'Max Cushion|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'CASIN1M10',
+        'Max Cushion|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'CASIN1M11',
+        'Max Cushion|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'CASIN1M12',
+        'Max Cushion|Medium|Men\'s 13-13.5': 'CASIN1M13',
+        'Max Cushion|Medium|Men\'s 14-14.5': 'CASIN1M14',
+        'Max Cushion|Medium|Men\'s 15-15.5': 'CASIN1M15',
+
+        'Max Cushion|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'MXHIN1M5',
+        'Max Cushion|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'MXHIN1M6',
+        'Max Cushion|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'MXHIN1M7',
+        'Max Cushion|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'MXHIN1M8',
+        'Max Cushion|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'MXHIN1M9',
+        'Max Cushion|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'MXHIN1M10',
+        'Max Cushion|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'MXHIN1M11',
+        'Max Cushion|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'MXHIN1M12',
+        'Max Cushion|High|Men\'s 13-13.5': 'MXHIN1M13',
+        'Max Cushion|High|Men\'s 14-14.5': 'MXHIN1M14',
+        'Max Cushion|High|Men\'s 15-15.5': 'MXHIN1M15'
+    },
+
+    // NonSlip Insoles
+    'Blumaka\'s Nonslip \'Foamlock\' Performance Insoles': {
+        'Max Cushion|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'KMXIN1M5',
+        'Max Cushion|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'KMXIN1M6',
+        'Max Cushion|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'KMXIN1M7',
+        'Max Cushion|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'KMXIN1M8',
+        'Max Cushion|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'KMXIN1M9',
+        'Max Cushion|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'KMXIN1M10',
+        'Max Cushion|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'KMXIN1M11',
+        'Max Cushion|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'KMXIN1M12',
+        'Max Cushion|Low|Men\'s 13-13.5': 'KMXIN1M13',
+        'Max Cushion|Low|Men\'s 14-14.5': 'KMXIN1M14',
+        'Max Cushion|Low|Men\'s 15-15.5': 'KMXIN1M15',
+        'Max Cushion|Low|Men\'s 16-16.5': 'KMXIN1M16',
+        'Max Cushion|Low|Men\'s 17-17.5': 'KMXIN1M17',
+
+        'Max Cushion|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'KASIN1M5',
+        'Max Cushion|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'KASIN1M6',
+        'Max Cushion|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'KASIN1M7',
+        'Max Cushion|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'KASIN1M8',
+        'Max Cushion|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'KASIN1M9',
+        'Max Cushion|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'KASIN1M10',
+        'Max Cushion|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'KASIN1M11',
+        'Max Cushion|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'KASIN1M12',
+        'Max Cushion|Medium|Men\'s 13-13.5': 'KASIN1M13',
+        'Max Cushion|Medium|Men\'s 14-14.5': 'KASIN1M14',
+        'Max Cushion|Medium|Men\'s 15-15.5': 'KASIN1M15',
+
+        'Max Cushion|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'KMXHIN1M5',
+        'Max Cushion|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'KMXHIN1M6',
+        'Max Cushion|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'KMXHIN1M7',
+        'Max Cushion|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'KMXHIN1M8',
+        'Max Cushion|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'KMXHIN1M9',
+        'Max Cushion|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'KMXHIN1M10',
+        'Max Cushion|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'KMXHIN1M11',
+        'Max Cushion|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'KMXHIN1M12',
+        'Max Cushion|High|Men\'s 13-13.5': 'KMXHIN1M13',
+        'Max Cushion|High|Men\'s 14-14.5': 'KMXHIN1M14',
+        'Max Cushion|High|Men\'s 15-15.5': 'KMXHIN1M15',
+
+        'Low Profile|Low|Men\'s 5-5.5 | Women\'s 6-6.5': 'KLPIN1M5',
+        'Low Profile|Low|Men\'s 6-6.5 | Women\'s 7-7.5': 'KLPIN1M6',
+        'Low Profile|Low|Men\'s 7-7.5 | Women\'s 8-8.5': 'KLPIN1M7',
+        'Low Profile|Low|Men\'s 8-8.5 | Women\'s 9-9.5': 'KLPIN1M8',
+        'Low Profile|Low|Men\'s 9-9.5 | Women\'s 10-10.5': 'KLPIN1M9',
+        'Low Profile|Low|Men\'s 10-10.5 | Women\'s 11-11.5': 'KLPIN1M10',
+        'Low Profile|Low|Men\'s 11-11.5 | Women\'s 12-12.5': 'KLPIN1M11',
+        'Low Profile|Low|Men\'s 12-12.5 | Women\'s 13-13.5': 'KLPIN1M12',
+        'Low Profile|Low|Men\'s 13-13.5': 'KLPIN1M13',
+        'Low Profile|Low|Men\'s 14-14.5': 'KLPIN1M14',
+        'Low Profile|Low|Men\'s 15-15.5': 'KLPIN1M15',
+
+        'Low Profile|Medium|Men\'s 5-5.5 | Women\'s 6-6.5': 'KLPMIN1M5',
+        'Low Profile|Medium|Men\'s 6-6.5 | Women\'s 7-7.5': 'KLPMIN1M6',
+        'Low Profile|Medium|Men\'s 7-7.5 | Women\'s 8-8.5': 'KLPMIN1M7',
+        'Low Profile|Medium|Men\'s 8-8.5 | Women\'s 9-9.5': 'KLPMIN1M8',
+        'Low Profile|Medium|Men\'s 9-9.5 | Women\'s 10-10.5': 'KLPMIN1M9',
+        'Low Profile|Medium|Men\'s 10-10.5 | Women\'s 11-11.5': 'KLPMIN1M10',
+        'Low Profile|Medium|Men\'s 11-11.5 | Women\'s 12-12.5': 'KLPMIN1M11',
+        'Low Profile|Medium|Men\'s 12-12.5 | Women\'s 13-13.5': 'KLPMIN1M12',
+        'Low Profile|Medium|Men\'s 13-13.5': 'KLPMIN1M13',
+        'Low Profile|Medium|Men\'s 14-14.5': 'KLPMIN1M14',
+        'Low Profile|Medium|Men\'s 15-15.5': 'KLPMIN1M15',
+
+        'Low Profile|High|Men\'s 5-5.5 | Women\'s 6-6.5': 'KLPHIN1M5',
+        'Low Profile|High|Men\'s 6-6.5 | Women\'s 7-7.5': 'KLPHIN1M6',
+        'Low Profile|High|Men\'s 7-7.5 | Women\'s 8-8.5': 'KLPHIN1M7',
+        'Low Profile|High|Men\'s 8-8.5 | Women\'s 9-9.5': 'KLPHIN1M8',
+        'Low Profile|High|Men\'s 9-9.5 | Women\'s 10-10.5': 'KLPHIN1M9',
+        'Low Profile|High|Men\'s 10-10.5 | Women\'s 11-11.5': 'KLPHIN1M10',
+        'Low Profile|High|Men\'s 11-11.5 | Women\'s 12-12.5': 'KLPHIN1M11',
+        'Low Profile|High|Men\'s 12-12.5 | Women\'s 13-13.5': 'KLPHIN1M12',
+        'Low Profile|High|Men\'s 13-13.5': 'KLPHIN1M13',
+        'Low Profile|High|Men\'s 14-14.5': 'KLPHIN1M14',
+        'Low Profile|High|Men\'s 15-15.5': 'KLPHIN1M15'
+    },
+
+    // Fleks East Beach Slides
+    'Fleks® East Beach Slides': {
+        'Blu Blue|Women\'s 5 | Men\'s 4': '808-1BLUW5',
+        'Blu Blue|Women\'s 6 | Men\'s 5': '808-1BLUW6',
+        'Blu Blue|Women\'s 7 | Men\'s 6': '808-1BLUW7',
+        'Blu Blue|Women\'s 8 | Men\'s 7': '808-1BLUW8',
+        'Blu Blue|Women\'s 9 | Men\'s 8': '808-1BLUW9',
+        'Blu Blue|Women\'s 10 | Men\'s 9': '808-1BLUW10',
+        'Blu Blue|Women\'s 11 | Men\'s 10': '808-1BLUW11',
+        'Blu Blue|Women\'s 12 | Men\'s 11': '808-1BLUW12',
+        'Blu Blue|Women\'s 13 | Men\'s 12': '808-1BLUW13',
+        'Blu Blue|Women\'s 14 | Men\'s 13': '808-1BLUW14',
+        'Blu Blue|Women\'s 15 | Men\'s 14': '808-1BLUW15',
+        'Blu Blue|Women\'s 16 | Men\'s 15': '808-1BLUW16',
+
+        'Deep Blue Sea|Women\'s 5 | Men\'s 4': '808-1DBSW5',
+        'Deep Blue Sea|Women\'s 6 | Men\'s 5': '808-1DBSW6',
+        'Deep Blue Sea|Women\'s 7 | Men\'s 6': '808-1DBSW7',
+        'Deep Blue Sea|Women\'s 8 | Men\'s 7': '808-1DBSW8',
+        'Deep Blue Sea|Women\'s 9 | Men\'s 8': '808-1DBSW9',
+        'Deep Blue Sea|Women\'s 10 | Men\'s 9': '808-1DBSW10',
+        'Deep Blue Sea|Women\'s 11 | Men\'s 10': '808-1DBSW11',
+        'Deep Blue Sea|Women\'s 12 | Men\'s 11': '808-1DBSW12',
+        'Deep Blue Sea|Women\'s 13 | Men\'s 12': '808-1DBSW13',
+        'Deep Blue Sea|Women\'s 14 | Men\'s 13': '808-1DBSW14',
+        'Deep Blue Sea|Women\'s 15 | Men\'s 14': '808-1DBSW15',
+        'Deep Blue Sea|Women\'s 16 | Men\'s 15': '808-1DBSW16',
+
+        'Night|Women\'s 5 | Men\'s 4': '808-1NGTW5',
+        'Night|Women\'s 6 | Men\'s 5': '808-1NGTW6',
+        'Night|Women\'s 7 | Men\'s 6': '808-1NGTW7',
+        'Night|Women\'s 8 | Men\'s 7': '808-1NGTW8',
+        'Night|Women\'s 9 | Men\'s 8': '808-1NGTW9',
+        'Night|Women\'s 10 | Men\'s 9': '808-1NGTW10',
+        'Night|Women\'s 11 | Men\'s 10': '808-1NGTW11',
+        'Night|Women\'s 12 | Men\'s 11': '808-1NGTW12',
+        'Night|Women\'s 13 | Men\'s 12': '808-1NGTW13',
+        'Night|Women\'s 14 | Men\'s 13': '808-1NGTW14',
+        'Night|Women\'s 15 | Men\'s 14': '808-1NGTW15',
+        'Night|Women\'s 16 | Men\'s 15': '808-1NGTW16',
+
+        'Clear Day|Women\'s 5 | Men\'s 4': '808-1CLDW5',
+        'Clear Day|Women\'s 6 | Men\'s 5': '808-1CLDW6',
+        'Clear Day|Women\'s 7 | Men\'s 6': '808-1CLDW7',
+        'Clear Day|Women\'s 8 | Men\'s 7': '808-1CLDW8',
+        'Clear Day|Women\'s 9 | Men\'s 8': '808-1CLDW9',
+        'Clear Day|Women\'s 10 | Men\'s 9': '808-1CLDW10',
+        'Clear Day|Women\'s 11 | Men\'s 10': '808-1CLDW11',
+        'Clear Day|Women\'s 12 | Men\'s 11': '808-1CLDW12',
+        'Clear Day|Women\'s 13 | Men\'s 12': '808-1CLDW13',
+        'Clear Day|Women\'s 14 | Men\'s 13': '808-1CLDW14',
+        'Clear Day|Women\'s 15 | Men\'s 14': '808-1CLDW15',
+        'Clear Day|Women\'s 16 | Men\'s 15': '808-1CLDW16'
+    },
+
+    // NonSlip Carbon Elite Insole
+    'NonSlip Carbon Elite Insole': {
+        'Men\'s 5-5.5 | Women\'s 6-6.5': 'KMXCEINM5',
+        'Men\'s 6-6.5 | Women\'s 7-7.5': 'KMXCEINM6',
+        'Men\'s 7-7.5 | Women\'s 8-8.5': 'KMXCEINM7',
+        'Men\'s 8-8.5 | Women\'s 9-9.5': 'KMXCEINM8',
+        'Men\'s 9-9.5 | Women\'s 10-10.5': 'KMXCEINM9',
+        'Men\'s 10-10.5 | Women\'s 11-11.5': 'KMXCEINM10',
+        'Men\'s 11-11.5 | Women\'s 12-12.5': 'KMXCEINM11',
+        'Men\'s 12-12.5 | Women\'s 13-13.5': 'KMXCEINM12',
+        'Men\'s 13-13.5': 'KMXCEINM13',
+        'Men\'s 14-14.5': 'KMXCEINM14',
+        'Men\'s 15-15.5': 'KMXCEINM15'
+    }
+};
+
+// Parse bundle properties and convert to SKU-based line items
+function parsePropertiesToSKUs(properties) {
+    const lineItems = [];
+
+    // Group properties by product
+    const productGroups = groupPropertiesByProduct(properties);
+
+    for (const [productName, productProperties] of Object.entries(productGroups)) {
+        console.log(`Processing product: ${productName}`, productProperties);
+
+        const sku = findSKUForProduct(productName, productProperties);
+        if (sku) {
+            lineItems.push({
+                sku: sku,
+                quantity: 1,
+                properties: convertToOriginalProperties(productName, productProperties)
+            });
+            console.log(`Found SKU ${sku} for ${productName}`);
+        } else {
+            console.log(`No SKU found for ${productName} with options:`, productProperties);
+        }
+    }
+
+    return lineItems;
+}
+
+// Group properties by product name
+function groupPropertiesByProduct(properties) {
+    const groups = {};
+
+    for (const [key, value] of Object.entries(properties)) {
+        // Parse property key format: "Product Name: Option Type"
+        const match = key.match(/^(.+?):\s*(.+)$/);
+        if (match) {
+            const productName = match[1].trim();
+            const optionType = match[2].trim();
+
+            if (!groups[productName]) {
+                groups[productName] = {};
+            }
+            groups[productName][optionType] = value;
+        }
+    }
+
+    return groups;
+}
+
+// Find SKU for a specific product and options
+function findSKUForProduct(productName, selectedOptions) {
+    const productMapping = PRODUCT_SKU_MAPPING[productName];
+
+    if (!productMapping) {
+        console.log(`No SKU mapping found for product: ${productName}`);
+        return null;
+    }
+
+    // Create variant key based on product structure
+    let variantKey;
+
+    if (productName === 'Max Comfort Insoles' || productName === 'Blumaka\'s Nonslip \'Foamlock\' Performance Insoles') {
+        // Format: Profile|Arch Support|Size
+        const profile = selectedOptions['Profile'];
+        const archSupport = selectedOptions['Arch Support'];
+        const size = selectedOptions['Size'];
+
+        if (profile && archSupport && size) {
+            variantKey = `${profile}|${archSupport}|${size}`;
+        }
+    } else if (productName === 'Fleks® East Beach Slides') {
+        // Format: Color|Size
+        const color = selectedOptions['Color'];
+        const size = selectedOptions['Size'];
+
+        if (color && size) {
+            variantKey = `${color}|${size}`;
+        }
+    } else if (productName === 'NonSlip Carbon Elite Insole') {
+        // Format: Size only
+        const size = selectedOptions['Size'];
+
+        if (size) {
+            variantKey = size;
+        }
+    }
+
+    if (variantKey && productMapping[variantKey]) {
+        return productMapping[variantKey];
+    }
+
+    console.log(`No SKU mapping found for key: ${variantKey} in product: ${productName}`);
+    console.log('Available keys:', Object.keys(productMapping));
+
+    return null;
+}
+
+// Convert selected options back to original property format
+function convertToOriginalProperties(productName, selectedOptions) {
+    const properties = {};
+
+    for (const [optionType, value] of Object.entries(selectedOptions)) {
+        const propertyKey = `${productName}: ${optionType}`;
+        properties[propertyKey] = value;
+    }
+
+    return properties;
+}
