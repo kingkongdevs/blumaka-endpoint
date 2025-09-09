@@ -8,25 +8,25 @@ exports.handler = async (event, context) => {
     };
 
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return {statusCode: 200, headers, body: ''};
     }
 
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
             headers,
-            body: JSON.stringify({ error: 'Method not allowed' })
+            body: JSON.stringify({error: 'Method not allowed'})
         };
     }
 
     try {
-        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body);
+        const {properties, shopDomain, bundleProductId} = JSON.parse(event.body);
 
         if (!properties || typeof properties !== 'object') {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({ error: 'Invalid properties data' })
+                body: JSON.stringify({error: 'Invalid properties data'})
             };
         }
 
@@ -38,7 +38,7 @@ exports.handler = async (event, context) => {
             return {
                 statusCode: 500,
                 headers,
-                body: JSON.stringify({ error: 'Missing Shopify credentials' })
+                body: JSON.stringify({error: 'Missing Shopify credentials'})
             };
         }
 
