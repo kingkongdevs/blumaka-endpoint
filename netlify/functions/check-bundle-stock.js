@@ -118,51 +118,123 @@ exports.handler = async (event, context) => {
     }
 }
 
-// Check inventory levels for multiple SKUs
+// Check inventory levels for multiple SKUs with detailed debugging
 async function checkInventoryLevels(lineItems, shopDomain, accessToken) {
     const results = []
 
     for (const item of lineItems) {
         try {
-            // Get variant by SKU
-            const variant = await getVariantBySKU(item.sku, shopDomain, accessToken)
+            console.log(`\n=== Checking stock for SKU: ${item.sku} ===`)
 
-            if (!variant) {
+            // Get variant by SKU
+            const variantResult = await getVariantBySKU(item.sku, shopDomain, accessToken)
+
+            if (!variantResult.found) {
+                console.log(`❌ Variant not found for SKU: ${item.sku}`)
                 results.push({
                     sku: item.sku,
                     quantity: item.quantity,
                     available: false,
                     error: 'Product variant not found',
-                    availableQuantity: 0
+                    availableQuantity: 0,
+                    debug: {
+                        variantFound: false,
+                        searchedProducts: variantResult.searchedProducts
+                    }
+                })
+                continue
+            }
+
+            const variant = variantResult.variant
+            console.log(`✅ Found variant ID: ${variant.id} for SKU: ${item.sku}`)
+            console.log(`📋 Variant details:`, {
+                id: variant.id,
+                sku: variant.sku,
+                inventory_management: variant.inventory_management,
+                inventory_policy: variant.inventory_policy,
+                inventory_item_id: variant.inventory_item_id
+            })
+
+            // Check if inventory is tracked
+            if (variant.inventory_management !== 'shopify') {
+                console.log(`⚠️ Inventory not tracked for SKU: ${item.sku} (management: ${variant.inventory_management})`)
+                results.push({
+                    sku: item.sku,
+                    quantity: item.quantity,
+                    available: true, // If not tracked, assume available
+                    availableQuantity: 'unlimited',
+                    variantId: variant.id,
+                    inventoryItemId: variant.inventory_item_id,
+                    inventoryPolicy: variant.inventory_policy,
+                    inventoryManagement: variant.inventory_management,
+                    debug: {
+                        variantFound: true,
+                        inventoryTracked: false,
+                        reason: 'Inventory management not set to shopify'
+                    }
                 })
                 continue
             }
 
             // Get inventory levels for this variant
-            const inventoryLevel = await getInventoryLevel(variant.inventory_item_id, shopDomain, accessToken)
+            const inventoryResult = await getInventoryLevel(variant.inventory_item_id, shopDomain, accessToken)
 
-            const availableQuantity = inventoryLevel?.available || 0
-            const isAvailable = availableQuantity >= item.quantity
+            console.log(`📦 Inventory check result:`, inventoryResult)
+
+            if (!inventoryResult.success) {
+                console.log(`❌ Failed to get inventory for SKU: ${item.sku}`)
+                results.push({
+                    sku: item.sku,
+                    quantity: item.quantity,
+                    available: false,
+                    error: inventoryResult.error,
+                    availableQuantity: 0,
+                    variantId: variant.id,
+                    inventoryItemId: variant.inventory_item_id,
+                    debug: {
+                        variantFound: true,
+                        inventoryTracked: true,
+                        inventoryCheckFailed: true,
+                        error: inventoryResult.error,
+                        locations: inventoryResult.locations
+                    }
+                })
+                continue
+            }
+
+            const totalAvailable = inventoryResult.totalAvailable
+            const isAvailable = totalAvailable >= item.quantity
+
+            console.log(`📊 Final result for SKU ${item.sku}: ${totalAvailable} available, need ${item.quantity}, result: ${isAvailable ? '✅' : '❌'}`)
 
             results.push({
                 sku: item.sku,
                 quantity: item.quantity,
                 available: isAvailable,
-                availableQuantity: availableQuantity,
+                availableQuantity: totalAvailable,
                 variantId: variant.id,
                 inventoryItemId: variant.inventory_item_id,
-                inventoryPolicy: variant.inventory_policy, // 'deny' or 'continue'
-                inventoryManagement: variant.inventory_management // 'shopify' or null
+                inventoryPolicy: variant.inventory_policy,
+                inventoryManagement: variant.inventory_management,
+                debug: {
+                    variantFound: true,
+                    inventoryTracked: true,
+                    locations: inventoryResult.locations,
+                    totalAvailable: totalAvailable
+                }
             })
 
         } catch (error) {
-            console.error(`Error checking stock for SKU ${item.sku}:`, error)
+            console.error(`💥 Error checking stock for SKU ${item.sku}:`, error)
             results.push({
                 sku: item.sku,
                 quantity: item.quantity,
                 available: false,
                 error: error.message,
-                availableQuantity: 0
+                availableQuantity: 0,
+                debug: {
+                    exception: error.message
+                }
             })
         }
     }
@@ -170,44 +242,89 @@ async function checkInventoryLevels(lineItems, shopDomain, accessToken) {
     return results
 }
 
-// Get product variant by SKU
+// Enhanced variant search with better debugging
 async function getVariantBySKU(sku, shopDomain, accessToken) {
     try {
-        // Search for products containing this SKU
-        const response = await fetch(`https://${shopDomain}/admin/api/2024-01/products.json?fields=id,variants&limit=250`, {
-            headers: {
-                'X-Shopify-Access-Token': accessToken
+        console.log(`🔍 Searching for variant with SKU: ${sku}`)
+
+        let allProducts = []
+        let nextPageInfo = null
+        let pageCount = 0
+        const maxPages = 10 // Prevent infinite loops
+
+        do {
+            pageCount++
+            console.log(`📄 Fetching products page ${pageCount}`)
+
+            let url = `https://${shopDomain}/admin/api/2024-01/products.json?fields=id,title,variants&limit=250`
+
+            if (nextPageInfo) {
+                url += `&page_info=${nextPageInfo}`
             }
-        })
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch products: ${response.status}`)
-        }
+            const response = await fetch(url, {
+                headers: {
+                    'X-Shopify-Access-Token': accessToken
+                }
+            })
 
-        const data = await response.json()
+            if (!response.ok) {
+                throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
+            }
+
+            const data = await response.json()
+            allProducts.push(...data.products)
+
+            console.log(`📦 Found ${data.products.length} products on page ${pageCount}`)
+
+            // Check for pagination
+            const linkHeader = response.headers.get('Link')
+            nextPageInfo = null
+
+            if (linkHeader && linkHeader.includes('rel="next"')) {
+                const nextMatch = linkHeader.match(/<[^>]*[?&]page_info=([^>&]+)[^>]*>;\s*rel="next"/)
+                if (nextMatch) {
+                    nextPageInfo = nextMatch[1]
+                }
+            }
+
+        } while (nextPageInfo && pageCount < maxPages)
+
+        console.log(`📋 Total products searched: ${allProducts.length}`)
 
         // Search through all variants to find matching SKU
-        for (const product of data.products) {
+        for (const product of allProducts) {
             for (const variant of product.variants) {
                 if (variant.sku === sku) {
-                    return variant
+                    console.log(`🎯 Found matching variant in product: ${product.title}`)
+                    return {
+                        found: true,
+                        variant: variant,
+                        product: product,
+                        searchedProducts: allProducts.length
+                    }
                 }
             }
         }
 
-        // If not found in first page, we might need to paginate
-        // For now, return null - you can implement pagination if needed
-        return null
+        console.log(`❌ No variant found with SKU: ${sku}`)
+        return {
+            found: false,
+            variant: null,
+            searchedProducts: allProducts.length
+        }
 
     } catch (error) {
-        console.error(`Error fetching variant for SKU ${sku}:`, error)
+        console.error(`💥 Error fetching variant for SKU ${sku}:`, error)
         throw error
     }
 }
 
-// Get inventory level for an inventory item
+// Enhanced inventory level check with multiple locations
 async function getInventoryLevel(inventoryItemId, shopDomain, accessToken) {
     try {
+        console.log(`📍 Getting inventory levels for item: ${inventoryItemId}`)
+
         // Get all locations first
         const locationsResponse = await fetch(`https://${shopDomain}/admin/api/2024-01/locations.json`, {
             headers: {
@@ -220,17 +337,30 @@ async function getInventoryLevel(inventoryItemId, shopDomain, accessToken) {
         }
 
         const locationsData = await locationsResponse.json()
+        console.log(`🏪 Found ${locationsData.locations.length} locations:`)
 
-        // Find the primary location (or you can specify which location to check)
-        const primaryLocation = locationsData.locations.find(loc => loc.legacy) || locationsData.locations[0]
+        const locationDetails = locationsData.locations.map(loc => ({
+            id: loc.id,
+            name: loc.name,
+            active: loc.active,
+            legacy: loc.legacy || false
+        }))
+        console.log(locationDetails)
 
-        if (!primaryLocation) {
-            throw new Error('No location found')
+        if (locationsData.locations.length === 0) {
+            return {
+                success: false,
+                error: 'No locations found',
+                locations: [],
+                totalAvailable: 0
+            }
         }
 
-        // Get inventory level for this item at the primary location
+        // Get inventory levels for all locations
+        const locationIds = locationsData.locations.map(loc => loc.id).join(',')
+
         const inventoryResponse = await fetch(
-            `https://${shopDomain}/admin/api/2024-01/inventory_levels.json?inventory_item_ids=${inventoryItemId}&location_ids=${primaryLocation.id}`,
+            `https://${shopDomain}/admin/api/2024-01/inventory_levels.json?inventory_item_ids=${inventoryItemId}&location_ids=${locationIds}`,
             {
                 headers: {
                     'X-Shopify-Access-Token': accessToken
@@ -243,13 +373,42 @@ async function getInventoryLevel(inventoryItemId, shopDomain, accessToken) {
         }
 
         const inventoryData = await inventoryResponse.json()
+        console.log(`📦 Inventory levels response:`, inventoryData)
 
-        // Return the inventory level (or null if not found)
-        return inventoryData.inventory_levels[0] || null
+        // Calculate total available across all locations
+        let totalAvailable = 0
+        const locationBreakdown = []
+
+        for (const level of inventoryData.inventory_levels) {
+            const location = locationsData.locations.find(loc => loc.id === level.location_id)
+            const available = level.available || 0
+            totalAvailable += available
+
+            locationBreakdown.push({
+                locationId: level.location_id,
+                locationName: location ? location.name : 'Unknown',
+                available: available
+            })
+
+            console.log(`📍 ${location?.name || 'Unknown'} (${level.location_id}): ${available} available`)
+        }
+
+        console.log(`📊 Total available across all locations: ${totalAvailable}`)
+
+        return {
+            success: true,
+            totalAvailable: totalAvailable,
+            locations: locationBreakdown
+        }
 
     } catch (error) {
-        console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error)
-        throw error
+        console.error(`💥 Error fetching inventory level for item ${inventoryItemId}:`, error)
+        return {
+            success: false,
+            error: error.message,
+            totalAvailable: 0,
+            locations: []
+        }
     }
 }
 
