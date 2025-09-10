@@ -68,62 +68,16 @@ exports.handler = async (event, context) => {
             }
         }
 
-        // Validate each line item structure
-        const invalidLineItems = lineItems.filter(item =>
-            !item.sku || typeof item.sku !== 'string' ||
-            !item.quantity || typeof item.quantity !== 'number'
-        )
+        // Check inventory levels for all SKUs
+        const stockResults = await checkInventoryLevels(lineItems, shopifyShopDomain, shopifyAccessToken)
 
-        if (invalidLineItems.length > 0) {
-            return {
-                statusCode: 400,
-                headers,
-                body: JSON.stringify({
-                    error: 'Invalid line item structure',
-                    invalidItems: invalidLineItems,
-                    allLineItems: lineItems
-                })
-            }
-        }
+        console.log('Stock check results:', stockResults)
 
-        // Create draft order payload using SKUs
-        const draftOrderPayload = {
-            draft_order: {
-                line_items: lineItems,
-                use_customer_default_address: false,
-                invoice_sent_at: null,
-                note: 'Stock validation check - do not fulfill'
-            }
-        }
+        // Analyze results
+        const outOfStockItems = stockResults.filter(item => !item.available)
+        const allInStock = outOfStockItems.length === 0
 
-        console.log('Creating draft order with payload:', JSON.stringify(draftOrderPayload, null, 2))
-
-        // Make API call to Shopify
-        const response = await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders.json`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Shopify-Access-Token': shopifyAccessToken
-            },
-            body: JSON.stringify(draftOrderPayload)
-        })
-
-        const result = await response.json()
-        console.log('Shopify API response status:', response.status)
-        console.log('Shopify API response:', result)
-
-        if (response.ok) {
-            // Draft order created successfully - items are in stock
-            const draftOrderId = result.draft_order.id
-
-            // Immediately delete the draft order since we only wanted to validate
-            await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders/${draftOrderId}.json`, {
-                method: 'DELETE',
-                headers: {
-                    'X-Shopify-Access-Token': shopifyAccessToken
-                }
-            })
-
+        if (allInStock) {
             return {
                 statusCode: 200,
                 headers,
@@ -131,36 +85,21 @@ exports.handler = async (event, context) => {
                     available: true,
                     message: 'All items in stock',
                     lineItems: lineItems,
+                    stockResults: stockResults,
                     properties: properties
                 })
             }
         } else {
-            // Draft order failed - likely due to stock issues
-            let stockIssues = []
-
-            if (result.errors) {
-                const errorMessages = Array.isArray(result.errors) ? result.errors : [result.errors]
-                errorMessages.forEach(error => {
-                    if (typeof error === 'string') {
-                        stockIssues.push(error)
-                    } else if (error.line_items) {
-                        error.line_items.forEach(lineError => {
-                            stockIssues.push(lineError)
-                        })
-                    }
-                })
-            }
-
             return {
                 statusCode: 200,
                 headers,
                 body: JSON.stringify({
                     available: false,
                     message: 'Some items are out of stock',
-                    errors: stockIssues,
+                    outOfStockItems: outOfStockItems,
+                    stockResults: stockResults,
                     lineItems: lineItems,
-                    properties: properties,
-                    shopifyResponse: result
+                    properties: properties
                 })
             }
         }
@@ -176,6 +115,141 @@ exports.handler = async (event, context) => {
                 message: error.message
             })
         }
+    }
+}
+
+// Check inventory levels for multiple SKUs
+async function checkInventoryLevels(lineItems, shopDomain, accessToken) {
+    const results = []
+
+    for (const item of lineItems) {
+        try {
+            // Get variant by SKU
+            const variant = await getVariantBySKU(item.sku, shopDomain, accessToken)
+
+            if (!variant) {
+                results.push({
+                    sku: item.sku,
+                    quantity: item.quantity,
+                    available: false,
+                    error: 'Product variant not found',
+                    availableQuantity: 0
+                })
+                continue
+            }
+
+            // Get inventory levels for this variant
+            const inventoryLevel = await getInventoryLevel(variant.inventory_item_id, shopDomain, accessToken)
+
+            const availableQuantity = inventoryLevel?.available || 0
+            const isAvailable = availableQuantity >= item.quantity
+
+            results.push({
+                sku: item.sku,
+                quantity: item.quantity,
+                available: isAvailable,
+                availableQuantity: availableQuantity,
+                variantId: variant.id,
+                inventoryItemId: variant.inventory_item_id,
+                inventoryPolicy: variant.inventory_policy, // 'deny' or 'continue'
+                inventoryManagement: variant.inventory_management // 'shopify' or null
+            })
+
+        } catch (error) {
+            console.error(`Error checking stock for SKU ${item.sku}:`, error)
+            results.push({
+                sku: item.sku,
+                quantity: item.quantity,
+                available: false,
+                error: error.message,
+                availableQuantity: 0
+            })
+        }
+    }
+
+    return results
+}
+
+// Get product variant by SKU
+async function getVariantBySKU(sku, shopDomain, accessToken) {
+    try {
+        // Search for products containing this SKU
+        const response = await fetch(`https://${shopDomain}/admin/api/2024-01/products.json?fields=id,variants&limit=250`, {
+            headers: {
+                'X-Shopify-Access-Token': accessToken
+            }
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch products: ${response.status}`)
+        }
+
+        const data = await response.json()
+
+        // Search through all variants to find matching SKU
+        for (const product of data.products) {
+            for (const variant of product.variants) {
+                if (variant.sku === sku) {
+                    return variant
+                }
+            }
+        }
+
+        // If not found in first page, we might need to paginate
+        // For now, return null - you can implement pagination if needed
+        return null
+
+    } catch (error) {
+        console.error(`Error fetching variant for SKU ${sku}:`, error)
+        throw error
+    }
+}
+
+// Get inventory level for an inventory item
+async function getInventoryLevel(inventoryItemId, shopDomain, accessToken) {
+    try {
+        // Get all locations first
+        const locationsResponse = await fetch(`https://${shopDomain}/admin/api/2024-01/locations.json`, {
+            headers: {
+                'X-Shopify-Access-Token': accessToken
+            }
+        })
+
+        if (!locationsResponse.ok) {
+            throw new Error(`Failed to fetch locations: ${locationsResponse.status}`)
+        }
+
+        const locationsData = await locationsResponse.json()
+
+        // Find the primary location (or you can specify which location to check)
+        const primaryLocation = locationsData.locations.find(loc => loc.legacy) || locationsData.locations[0]
+
+        if (!primaryLocation) {
+            throw new Error('No location found')
+        }
+
+        // Get inventory level for this item at the primary location
+        const inventoryResponse = await fetch(
+            `https://${shopDomain}/admin/api/2024-01/inventory_levels.json?inventory_item_ids=${inventoryItemId}&location_ids=${primaryLocation.id}`,
+            {
+                headers: {
+                    'X-Shopify-Access-Token': accessToken
+                }
+            }
+        )
+
+        if (!inventoryResponse.ok) {
+            throw new Error(`Failed to fetch inventory levels: ${inventoryResponse.status}`)
+        }
+
+        const inventoryData = await inventoryResponse.json()
+
+        // Return the inventory level (or null if not found)
+        return inventoryData.inventory_levels[0] || null
+
+    } catch (error) {
+        console.error(`Error fetching inventory level for item ${inventoryItemId}:`, error)
+        throw error
     }
 }
 
@@ -513,7 +587,7 @@ function findSKUForProduct (productName, selectedOptions) {
         if (profile && archSupport && size) {
             variantKey = `${profile}|${archSupport}|${size}`
         }
-    } else if (productName === 'Fleks® East Beach Slides') { // Fixed: Added ® symbol
+    } else if (productName === 'Fleks® East Beach Slides') {
         // Format: Color|Size
         const color = selectedOptions['Color']
         const size = selectedOptions['Size']
