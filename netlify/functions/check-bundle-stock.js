@@ -5,10 +5,10 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    };
+    }
 
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return { statusCode: 200, headers, body: '' }
     }
 
     if (event.httpMethod !== 'POST') {
@@ -16,38 +16,38 @@ exports.handler = async (event, context) => {
             statusCode: 405,
             headers,
             body: JSON.stringify({ error: 'Method not allowed' })
-        };
+        }
     }
 
     try {
-        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body);
+        const { properties, shopDomain, bundleProductId } = JSON.parse(event.body)
 
         if (!properties || typeof properties !== 'object') {
             return {
                 statusCode: 400,
                 headers,
                 body: JSON.stringify({ error: 'Invalid properties data' })
-            };
+            }
         }
 
         // Shopify Admin API credentials
-        const shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN;
-        const shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || shopDomain;
+        const shopifyAccessToken = process.env.SHOPIFY_ACCESS_TOKEN
+        const shopifyShopDomain = process.env.SHOPIFY_SHOP_DOMAIN || shopDomain
 
         if (!shopifyAccessToken || !shopifyShopDomain) {
             return {
                 statusCode: 500,
                 headers,
                 body: JSON.stringify({ error: 'Missing Shopify credentials' })
-            };
+            }
         }
 
-        console.log('Received properties:', properties);
+        console.log('Received properties:', properties)
 
         // Parse properties to extract SKUs using our product mapping
-        const lineItems = parsePropertiesToSKUs(properties);
+        const lineItems = parsePropertiesToSKUs(properties)
 
-        console.log('Parsed line items:', lineItems);
+        console.log('Parsed line items:', lineItems)
 
         if (!Array.isArray(lineItems) || lineItems.length === 0) {
             return {
@@ -58,14 +58,14 @@ exports.handler = async (event, context) => {
                     properties: properties,
                     lineItems: lineItems
                 })
-            };
+            }
         }
 
         // Validate each line item structure
         const invalidLineItems = lineItems.filter(item =>
             !item.sku || typeof item.sku !== 'string' ||
             !item.quantity || typeof item.quantity !== 'number'
-        );
+        )
 
         if (invalidLineItems.length > 0) {
             return {
@@ -76,7 +76,7 @@ exports.handler = async (event, context) => {
                     invalidItems: invalidLineItems,
                     allLineItems: lineItems
                 })
-            };
+            }
         }
 
         // Create draft order payload using SKUs
@@ -85,11 +85,11 @@ exports.handler = async (event, context) => {
                 line_items: lineItems,
                 use_customer_default_address: false,
                 invoice_sent_at: null,
-                note: "Stock validation check - do not fulfill"
+                note: 'Stock validation check - do not fulfill'
             }
-        };
+        }
 
-        console.log('Creating draft order with payload:', JSON.stringify(draftOrderPayload, null, 2));
+        console.log('Creating draft order with payload:', JSON.stringify(draftOrderPayload, null, 2))
 
         // Make API call to Shopify
         const response = await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders.json`, {
@@ -99,15 +99,15 @@ exports.handler = async (event, context) => {
                 'X-Shopify-Access-Token': shopifyAccessToken
             },
             body: JSON.stringify(draftOrderPayload)
-        });
+        })
 
-        const result = await response.json();
-        console.log('Shopify API response status:', response.status);
-        console.log('Shopify API response:', result);
+        const result = await response.json()
+        console.log('Shopify API response status:', response.status)
+        console.log('Shopify API response:', result)
 
         if (response.ok) {
             // Draft order created successfully - items are in stock
-            const draftOrderId = result.draft_order.id;
+            const draftOrderId = result.draft_order.id
 
             // Immediately delete the draft order since we only wanted to validate
             await fetch(`https://${shopifyShopDomain}/admin/api/2024-01/draft_orders/${draftOrderId}.json`, {
@@ -115,7 +115,7 @@ exports.handler = async (event, context) => {
                 headers: {
                     'X-Shopify-Access-Token': shopifyAccessToken
                 }
-            });
+            })
 
             return {
                 statusCode: 200,
@@ -126,22 +126,22 @@ exports.handler = async (event, context) => {
                     lineItems: lineItems,
                     properties: properties
                 })
-            };
+            }
         } else {
             // Draft order failed - likely due to stock issues
-            let stockIssues = [];
+            let stockIssues = []
 
             if (result.errors) {
-                const errorMessages = Array.isArray(result.errors) ? result.errors : [result.errors];
+                const errorMessages = Array.isArray(result.errors) ? result.errors : [result.errors]
                 errorMessages.forEach(error => {
                     if (typeof error === 'string') {
-                        stockIssues.push(error);
+                        stockIssues.push(error)
                     } else if (error.line_items) {
                         error.line_items.forEach(lineError => {
-                            stockIssues.push(lineError);
-                        });
+                            stockIssues.push(lineError)
+                        })
                     }
-                });
+                })
             }
 
             return {
@@ -155,11 +155,11 @@ exports.handler = async (event, context) => {
                     properties: properties,
                     shopifyResponse: result
                 })
-            };
+            }
         }
 
     } catch (error) {
-        console.error('Stock check error:', error);
+        console.error('Stock check error:', error)
 
         return {
             statusCode: 500,
@@ -168,9 +168,9 @@ exports.handler = async (event, context) => {
                 error: 'Internal server error',
                 message: error.message
             })
-        };
+        }
     }
-};
+}
 
 // Product SKU mapping based on the CSV data provided
 const PRODUCT_SKU_MAPPING = {
@@ -436,114 +436,114 @@ const PRODUCT_SKU_MAPPING = {
         'Men\'s 14-14.5': 'KMXCEINM14',
         'Men\'s 15-15.5': 'KMXCEINM15'
     }
-};
+}
 
 // Parse bundle properties and convert to SKU-based line items
-function parsePropertiesToSKUs(properties) {
-    const lineItems = [];
+function parsePropertiesToSKUs (properties) {
+    const lineItems = []
 
     // Group properties by product
-    const productGroups = groupPropertiesByProduct(properties);
+    const productGroups = groupPropertiesByProduct(properties)
 
     for (const [productName, productProperties] of Object.entries(productGroups)) {
-        console.log(`Processing product: ${productName}`, productProperties);
+        console.log(`Processing product: ${productName}`, productProperties)
 
-        const sku = findSKUForProduct(productName, productProperties);
+        const sku = findSKUForProduct(productName, productProperties)
         if (sku) {
             lineItems.push({
                 sku: sku,
                 quantity: 1,
                 properties: convertToOriginalProperties(productName, productProperties)
-            });
-            console.log(`Found SKU ${sku} for ${productName}`);
+            })
+            console.log(`Found SKU ${sku} for ${productName}`)
         } else {
-            console.log(`No SKU found for ${productName} with options:`, productProperties);
+            console.log(`No SKU found for ${productName} with options:`, productProperties)
         }
     }
 
-    return lineItems;
+    return lineItems
 }
 
 // Group properties by product name
-function groupPropertiesByProduct(properties) {
-    const groups = {};
+function groupPropertiesByProduct (properties) {
+    const groups = {}
 
     for (const [key, value] of Object.entries(properties)) {
         // Parse property key format: "Product Name: Option Type"
-        const match = key.match(/^(.+?):\s*(.+)$/);
+        const match = key.match(/^(.+?):\s*(.+)$/)
         if (match) {
-            const productName = match[1].trim();
-            const optionType = match[2].trim();
+            const productName = match[1].trim()
+            const optionType = match[2].trim()
 
             if (!groups[productName]) {
-                groups[productName] = {};
+                groups[productName] = {}
             }
-            groups[productName][optionType] = value;
+            groups[productName][optionType] = value
         }
     }
 
-    return groups;
+    return groups
 }
 
 // Find SKU for a specific product and options
-function findSKUForProduct(productName, selectedOptions) {
-    const productMapping = PRODUCT_SKU_MAPPING[productName];
+function findSKUForProduct (productName, selectedOptions) {
+    const productMapping = PRODUCT_SKU_MAPPING[productName]
 
     if (!productMapping) {
-        console.log(`No SKU mapping found for product: ${productName}`);
-        return null;
+        console.log(`No SKU mapping found for product: ${productName}`)
+        return null
     }
 
     // Create variant key based on product structure
-    let variantKey;
+    let variantKey
 
     if (productName === 'Max Comfort Insoles' || productName === 'NonSlip \'FoamLock\' Performance Insoles') {
         // Format: Profile|Arch Support|Size
-        const profile = selectedOptions['Profile'];
-        const archSupport = selectedOptions['Arch Support'];
-        const size = selectedOptions['Size'];
+        const profile = selectedOptions['Profile']
+        const archSupport = selectedOptions['Arch Support']
+        const size = selectedOptions['Size']
 
         if (profile && archSupport && size) {
-            variantKey = `${profile}|${archSupport}|${size}`;
+            variantKey = `${profile}|${archSupport}|${size}`
         }
     } else if (productName === 'Fleks East Beach Slides') {
         // Format: Color|Size
-        const color = selectedOptions['Color'];
-        const size = selectedOptions['Size'];
+        const color = selectedOptions['Color']
+        const size = selectedOptions['Size']
 
         if (color && size) {
-            variantKey = `${color}|${size}`;
+            variantKey = `${color}|${size}`
         }
     } else if (productName === 'NonSlip Carbon Elite Insole') {
         // Format: Size only
-        const size = selectedOptions['Size'];
+        const size = selectedOptions['Size']
 
         if (size) {
-            variantKey = size;
+            variantKey = size
         }
     }
 
     if (variantKey && productMapping[variantKey]) {
-        return productMapping[variantKey];
+        return productMapping[variantKey]
     }
 
-    console.log(`No SKU mapping found for key: ${variantKey} in product: ${productName}`);
-    console.log('Available keys:', Object.keys(productMapping));
+    console.log(`No SKU mapping found for key: ${variantKey} in product: ${productName}`)
+    console.log('Available keys:', Object.keys(productMapping))
 
-    return null;
+    return null
 }
 
 // Convert selected options back to Shopify properties array format
-function convertToOriginalProperties(productName, selectedOptions) {
-    const properties = [];
+function convertToOriginalProperties (productName, selectedOptions) {
+    const properties = []
 
     for (const [optionType, value] of Object.entries(selectedOptions)) {
-        const propertyName = `${productName}: ${optionType}`;
+        const propertyName = `${productName}: ${optionType}`
         properties.push({
             name: propertyName,
             value: value
-        });
+        })
     }
 
-    return properties;
+    return properties
 }
