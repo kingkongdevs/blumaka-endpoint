@@ -56,12 +56,50 @@ exports.handler = async (event, context) => {
 
         console.log('Parsed line items:', lineItems)
 
-        if (!Array.isArray(lineItems) || lineItems.length === 0) {
+        if (!Array.isArray(lineItems)) {
             return {
                 statusCode: 400,
                 headers,
                 body: JSON.stringify({
-                    error: 'No valid SKUs found from properties',
+                    error: 'Invalid line items format',
+                    properties: properties,
+                    lineItems: lineItems
+                })
+            }
+        }
+
+        // Check for exactly 2 products - bundle should always contain 2 items
+        if (lineItems.length === 0) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: 'No valid SKUs found from properties - could not map any products',
+                    properties: properties,
+                    lineItems: lineItems
+                })
+            }
+        }
+
+        if (lineItems.length === 1) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: 'Bundle incomplete - only found 1 product SKU, expected 2 products',
+                    properties: properties,
+                    lineItems: lineItems,
+                    foundProduct: lineItems[0]
+                })
+            }
+        }
+
+        if (lineItems.length !== 2) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({
+                    error: `Invalid bundle configuration - found ${lineItems.length} products, expected exactly 2`,
                     properties: properties,
                     lineItems: lineItems
                 })
